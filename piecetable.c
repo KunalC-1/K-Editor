@@ -1,6 +1,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include "piecetable.h"
+#include "gui.h"
 char* added;
 char* original;
 int addedIndex;
@@ -299,7 +300,6 @@ void printPieceTable(pieceTable PT){
         currNode = currNode->next;
     }
 }
-
 
 
 void reverseArray(int *arr, int size){

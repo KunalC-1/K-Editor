@@ -6,18 +6,26 @@
 #include<errno.h>
 #include<termio.h>
 #include<string.h>
+#include "piecetable.h"
 #include "gui.h"
 /* Masking 3 bits from MSB
 *    ex. ASCII Code a = 11000001 (97)
 *    =====>  C1 & 1F = 01
 */
 #define CTRL_KEY(x) (x & 0x1f)
+char* added = NULL;
+int addedIndex = -1;
 
 typedef struct Editor{
     struct termios terminal_orig;
     int screenrows;
     int screencols;
+    pieceTable PT;
+    int numrows;
+    int rowOffset;              // Stores offset by which rows are scolled(used for vertical scrolling)
+    int colOffset;              // Stores offset by which cols are scolled(used for horizontal scrolling)
     int x, y;
+    int* rowLen;                // store lenght of each row displayed on screen(start from 0)
 }Editor;
 Editor E;
 
@@ -51,6 +59,63 @@ void rawModeON(){
     // Setting terminal attributes
     if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw_terminal) == -1) returnError("Error in tcsetattr");
 }
+
+
+// Function paste content of piece table into writebuffer
+void printLinesToWriteBuffer(writeBuffer* wb,pieceTable PT, int firstLine, int lastLine){
+    // Initialize Current Line Number as 1
+    int currLine = 1;
+    pieceNode*  currNode = PT.head->next;
+
+    // Traverse Through the PT until Required Node found
+    while(currNode != PT.tail && currLine + currNode->lineCount < firstLine){
+        currLine += currNode->lineCount;
+        currNode = currNode->next;
+    }
+    // rowLen will store lenght of each row from first to last line
+    int* rowLen = (int* )calloc((lastLine - firstLine) + 1 ,sizeof(int));
+    int rowIndex = 0;
+    // position index in rowLen array
+    int irow = 0;
+    while(currNode != PT.tail && currLine <= lastLine){
+        int offset = 0;
+        int count = firstLine - currLine > 0 ? firstLine - currLine : 0;
+        // calculate offset from where line starts
+        for(int i = 0; i < count; i++)
+            offset += currNode->lineBreak[i];
+        for(int i = currNode->start + offset; i <= currNode->end; i++){
+            // if all rows apppended into write buffer
+            if(irow == lastLine - firstLine + 1) break;
+            char* buffer = currNode->buffer;
+            rowIndex++;
+            if(buffer[i] == '\n'){
+                appendToWriteBuffer(wb, "\r\n", 2);
+                // printf("%d", rowIndex);
+                rowLen[irow] = rowIndex;
+                irow++;
+                rowIndex = 0;
+            }
+            else{
+                if(rowIndex > E.colOffset && rowIndex <= E.colOffset + E.screencols){
+                    if(isdigit(buffer[i])){
+                        // to set red color
+                        appendToWriteBuffer(wb, "\x1b[31m", 5);
+                        appendToWriteBuffer(wb, &buffer[i], 1);
+                        // to reser color
+                        appendToWriteBuffer(wb, "\x1b[39m", 5);
+                    }else
+                        appendToWriteBuffer(wb, &buffer[i], 1);
+                }
+            }
+        }
+        currLine += currNode->lineCount;
+        currNode = currNode->next;
+    }
+    rowLen[irow] = rowIndex;
+    free(E.rowLen);
+    E.rowLen = rowLen;
+}
+
 /*  Function Reads a character and Returns it   */
 int readCharFromTerminal(){
     char c;
@@ -97,26 +162,66 @@ int readCharFromTerminal(){
 void cursorMovement(int key){
     switch(key){
         case ARROW_LEFT:
-            if(E.x != 0) E.x--;
+            if (E.x != 0) {
+                E.x--;
+            } else if (E.y > 0) {
+                E.y--;
+                E.x = E.rowLen[E.y - E.rowOffset] > 1 ? E.rowLen[E.y - E.rowOffset] - 1 : 0;
+            }
             break;
         case ARROW_RIGHT:
-            if(E.x != E.screencols - 1) E.x++;
+            if(E.rowLen[E.y - E.rowOffset] < 1)
+                break;
+            if (E.y < E.numrows && E.rowLen[E.y - E.rowOffset] - 1 > E.x){
+                E.x++;
+            }else if (E.y + 1 < E.numrows){
+                E.y++;
+                E.x = 0;
+            }
             break;
         case ARROW_UP:
-            if(E.y != 0) E.y--;
+            if(E.y != 0){
+                E.y--;
+            }
+            if(E.rowLen[E.y - E.rowOffset] < 1)
+                E.x = 0;
+            else if(E.x > E.rowLen[E.y - E.rowOffset] - 1) 
+                E.x = E.rowLen[E.y - E.rowOffset] - 1;
             break;
         case ARROW_DOWN:
-        if(E.y != E.screenrows - 1) E.y++;
+            if(E.y + 1 < E.numrows){
+                E.y++;
+            }
+            if(E.rowLen[E.y - E.rowOffset] < 1)
+                E.x = 0;
+            else if(E.x > E.rowLen[E.y - E.rowOffset] - 1) 
+                E.x = E.rowLen[E.y - E.rowOffset] - 1;
+            
             break;
     }
 }
+//   Adjust rowOffset according to scrolling done 
+void scrollScreen(){
+    if(E.x < E.colOffset)
+        E.colOffset = E.x;
+    if(E.x >= E.colOffset + E.screencols)
+        E.colOffset = E.x - E.screencols + 1;
+    if(E.y < E.rowOffset)
+        E.rowOffset = E.y;
+    if(E.y >= E.rowOffset + E.screenrows)
+        E.rowOffset = E.y - E.screenrows + 1;
 
+}
+int bufferIndex = 0;
 /*  Function Processes Key Input   */
 void processKeyInput(){
     int repeat;
     int c = readCharFromTerminal();
-    printf("%c" , c);
+    // printf("%c" , c);
     switch (c){
+        case '\r':
+
+            break;
         case CTRL_KEY('q'):
             write(STDOUT_FILENO, "\x1b[2J", 4);
             write(STDOUT_FILENO, "\x1b[H", 3);
@@ -131,39 +236,65 @@ void processKeyInput(){
         case PAGE_UP:
         case PAGE_DOWN:
             repeat = E.screenrows;
-            c = (c == PAGE_UP) ? ARROW_UP : ARROW_DOWN;
-            while(repeat--) cursorMovement(c);
+            E.y = (c == PAGE_UP) ? E.rowOffset : E.rowOffset + E.screenrows - 1;
+            if(c == PAGE_DOWN && E.y > E.numrows) E.y = E.numrows;
+            while(repeat--) cursorMovement(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
             break;
         case HOME_KEY :
             E.x = 0;
             break;
         case END_KEY :
-            E.x = E.screencols - 1;
+            if(E.y < E.numrows)
+                E.x = E.rowLen[E.y] - 1;
             break;
+        case CTRL_KEY('l'):
+        case '\x1b':    
+            break;
+
+        default:
+            added[++addedIndex] = c;
+            insertCharAt(E.PT, E.y+1,E.x);
     }
 }
 /*
  * Function prints out Text in PieceTable onto the screen
  */
 void displayRows(writeBuffer* wb){
-    for(int i = 0; i < E.screenrows; i++){
-        // Printing Welcome message in middle of screen
-        if(i == E.screenrows/3){
-            char msg[50];
-            int msglen = sprintf(msg , "Editor By Kunal\r\n");
-            if(msglen > E.screencols) msglen = E.screencols;
-            int space = (E.screencols - msglen)/2;
-            if(space){
-                appendToWriteBuffer(wb, "~\x1b[K", 4);
-                space--;
+    if(E.numrows == 0){
+        for(int i = 0; i < E.screenrows; i++){
+            int actualRowPosition = i + E.rowOffset;
+            if(actualRowPosition >= E.numrows ){
+                // Printing Welcome message in middle of screen
+                if(E.numrows == 0 && i == E.screenrows /3){
+                    char msg[50];
+                    int msglen = sprintf(msg , "Editor By Kunal\r\n");
+                    if(msglen > E.screencols) msglen = E.screencols;
+                    int space = (E.screencols - msglen)/2;
+                    if(space){
+                        appendToWriteBuffer(wb, "~", 1);
+                        space--;
+                    }
+                    while(space--) appendToWriteBuffer(wb, " ", 1);
+                    appendToWriteBuffer(wb, msg, msglen);
+                }
+                else
+                    appendToWriteBuffer(wb, "~", 1);
             }
-            while(space--) appendToWriteBuffer(wb, " ", 1);
-            appendToWriteBuffer(wb, msg, msglen);
+            // appendToWriteBuffer(wb, "\x1b[K", 3);
+            if(i < E.screenrows - 1){
+                appendToWriteBuffer(wb, "\r\n", 2);
+            }
         }
-        else if(i != E.screenrows - 1)
-            appendToWriteBuffer(wb, "~\x1b[K\r\n", 6);
-        else
-            appendToWriteBuffer(wb, "~\x1b[K", 4);
+    }
+    else{
+
+        int lastline = E.rowOffset + E.screenrows > E.numrows ? E.numrows : E.rowOffset + E.screenrows;
+        printLinesToWriteBuffer(wb, E.PT, E.rowOffset + 1, lastline );
+        appendToWriteBuffer(wb, "\r\n", 2);
+        for(int i = lastline ; i < E.screenrows - 2; i++){
+            appendToWriteBuffer(wb, "~\r\n", 3);
+        }
+        appendToWriteBuffer(wb, "~", 1);
     }
 }
 
@@ -182,24 +313,26 @@ int getWindowSize(int *rows, int* cols){
 }
 /*   Function  Refreshes the Screen     */
 void refreshScreen(){
+    scrollScreen();
     char position[20];
     writeBuffer wb;
     initWriteBuffer(&wb);
 
     // Escape Sequence for hiding cursor
-    // appendToWriteBuffer(&wb, "\x1b[?25l", 6);
-  
+    appendToWriteBuffer(&wb, "\x1b[?25l", 6);
+    appendToWriteBuffer(&wb, "\x1b[2J", 4);
     // Escape Sequence for moving cursor to initial position
     appendToWriteBuffer(&wb, "\x1b[H", 3);    
 
     displayRows(&wb);
 
-    sprintf(position, "\x1b[%d;%dH", E.y+1, E.x+1);
+    sprintf(position, "\x1b[%d;%dH", E.y - E.rowOffset + 1, E.x - E.colOffset + 1);
     appendToWriteBuffer(&wb, position, strlen(position));
-    // appendToWriteBuffer(&wb, "\x1b[?25h", 6);
+    appendToWriteBuffer(&wb, "\x1b[?25h", 6);
 
     write(STDOUT_FILENO, wb.buf, wb.size);
     destroyWriteBuffer(&wb);
+    // printPieceTable(E.PT);
 }
 
 /*
@@ -225,7 +358,31 @@ void destroyWriteBuffer(writeBuffer* wb){
     wb->size = 0;
 }
 
+// Function opens provided filename as argument and stores content in piece table
+void openEditor(char *filename){
+    FILE *fp = fopen(filename, "rb");
+    fseek(fp, 0, SEEK_END);
+    long fileSize = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
 
+    if(fileSize != 0){
+        original =(char*) malloc(fileSize + 1);
+        fread(original, 1, fileSize, fp);
+    }else
+        original = NULL;
+
+    if(original){
+        pieceNode* newNode = newPieceNode(original, 0, fileSize - 1, 0);
+        newNode->next = (E.PT.head)->next;
+        newNode->prev = E.PT.head;
+
+        (E.PT.tail)->prev = newNode;
+        (E.PT.head)->next = newNode;
+        E.numrows = newNode->lineCount + 1;                               ///  //// //// See Later
+    }
+    fclose(fp);
+    // printPieceTable(E.PT);
+}
 
 
 
@@ -234,18 +391,32 @@ void destroyWriteBuffer(writeBuffer* wb){
  */
 void initEditor(){
     E.x = E.y = 0;
+    E.screencols = E.screenrows = 0;
+    E.numrows = 0;
+    E.rowOffset = E.colOffset =  0;
+    E.rowLen = (int*)calloc(E.screenrows + 1 , sizeof(int));
+    initPieceTable(&E.PT);
     if(getWindowSize(&E.screenrows, &E.screencols) == -1)
         returnError("Error in getWindowSize");
 }
 
 
 
-int main(){
+int main(int argc, char* argv[]){
+    added = (char* )malloc(sizeof(char) * 100);
+   
     rawModeON();
     initEditor();
+    openEditor(argv[1]);
+    // for(int i = 0; i < 3; i++)
+    //     printf("%d",E.rowLen[i]);
     while(1){
         refreshScreen();
+        
         processKeyInput();        
     }
     return 0;
 }
+
+
+
