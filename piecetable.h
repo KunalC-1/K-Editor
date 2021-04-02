@@ -25,13 +25,16 @@ typedef struct pieceTable{
 
 void initPieceTable(pieceTable* PT);
 pieceNode* newPieceNode(char* buffer, int start, int end, int bufferType);
-void splitNodeForInsert(pieceNode* node, int splitIndex);
+void splitNodeForInsert(pieceNode* node, int splitIndex, int midNodelen);
 void splitNodeForDelete(pieceNode* node, int splitIndex);
 void insertCharAt(pieceTable PT, int lineNo, int position);
 void deleteCharAt(pieceTable PT, int lineNo, int position);
 
-void writeToFile(pieceTable PT, FILE* fp);
-void printPieceTable(pieceTable PT);
-
+int writeToFile(pieceTable PT, FILE* fp);
+void printPieceTable(pieceTable PT, FILE* fp);
+char* copyLine(pieceTable PT, int lineNo);
 void reverseArray(int *arr, int size);
+int getIndexInNode(pieceTable PT, int lineNo, int position, int* count);
+void insertLineAt(pieceTable PT, char* line,int lineLen, int lineNo, int position);
+char* copyLineFrom(pieceTable PT, int startLine, int startCol,int copiedSize);
 #endif
