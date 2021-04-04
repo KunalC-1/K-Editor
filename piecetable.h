@@ -1,5 +1,7 @@
 #ifndef PIECETABLE_H_INCLUDED
 #define PIECETABLE_H_INCLUDED
+
+
 extern char* added;
 extern char* original;
 extern int addedIndex;
@@ -21,6 +23,10 @@ typedef struct pieceTable{
     pieceNode* head;
     pieceNode* tail;
 }pieceTable;
+typedef struct cursorPosition{
+    int lineNo;
+    int col;
+}cursorPosition;
 
 
 void initPieceTable(pieceTable* PT);
@@ -37,4 +43,6 @@ void reverseArray(int *arr, int size);
 int getIndexInNode(pieceTable PT, int lineNo, int position, int* count);
 void insertLineAt(pieceTable PT, char* line,int lineLen, int lineNo, int position);
 char* copyLineFrom(pieceTable PT, int startLine, int startCol,int copiedSize);
+cursorPosition* searchInPT(pieceTable PT, char* str);
+int* computeLPSArray(char* pat, int patternSize);
 #endif

@@ -8,6 +8,7 @@
 #include<time.h>
 #include <stdarg.h>
 #include<string.h>
+#include<limits.h>
 #include "piecetable.h"
 #include "gui.h"
 /* Masking 3 bits from MSB
@@ -168,9 +169,60 @@ void editorCopySelectedText(){
     fclose(fp);
     #endif
 }
+void editorSearchCallBack(char* query, int key);
+char *prompt(char* prompt, void (*callback)(char *, int));
+// Function Find for query in Piecetable
+void editorSearch(){
+    int saved_Ex = E.x;
+    int saved_Ey = E.y;
+    char* query = prompt("Search: %s (Press ESC to cancel)", editorSearchCallBack);   
+    if (query){
+        free(query);
+    }else{
+        E.x = saved_Ex;
+        E.y = saved_Ey;
+    }
+}
+void editorSearchCallBack(char* query, int key){
+    static char previous[100];
+    static int i = 1;
+    E.foundLength = strlen(query);
+    if(strlen(query) == 0 ||key == '\r' || key == '\x1b'){
+        i = 1;
+        previous[0] = '\0';
+        return;
+    }
+    if(strcmp(previous, query) != 0){
+        i = 1;
+    }
+    cursorPosition *foundAt = searchInPT(E.PT, query);
+    if(foundAt[0].lineNo == 1)  E.searchEnable = 0;
+    else E.searchEnable = 1;
+    if(key == ARROW_DOWN || key == ARROW_RIGHT){
+        if(i < foundAt[0].lineNo - 1)
+            i++;
+        else
+            i = 1;
+    }
+    if(key == ARROW_UP || key == ARROW_LEFT){
+       if(i != 1)
+            i--;
+        else    
+            i = foundAt[0].lineNo - 1;
+    }
+    if(i < foundAt[0].lineNo){
+        E.y = foundAt[i].lineNo - 1;
+        E.x = foundAt[i].col;
+    }
+    strcpy(previous, query);
+    free(foundAt);
+}
 // Function paste content of piece table into writebuffer
 void printLinesToWriteBuffer(writeBuffer* wb,pieceTable PT, int firstLine, int lastLine,int selectStartRow, int selectStartCol){
-    int count1 = 0, count2 = 0, count = 0, selectStart = 0, selectEnd = 0;
+    int count1 = 0, count2 = 0, count = 0, selectStart = 0, selectEnd = 0, flag = 0;
+    int foundNodeNo1 = 0, foundNodeNo2 = 0;
+    int foundStart = 0;
+    int foundEnd = 0;
     if(E.selectingText){
         selectStart = getIndexInNode(PT, selectStartRow, selectStartCol, &count1);
         selectEnd = getIndexInNode(PT, E.y + 1, E.x, &count2);
@@ -192,6 +244,10 @@ void printLinesToWriteBuffer(writeBuffer* wb,pieceTable PT, int firstLine, int l
                 count2 = temp;
             }
         }
+    }
+    if(E.searchEnable){
+        foundStart = getIndexInNode(PT, E.y + 1, E.x, &foundNodeNo1);
+        foundEnd =  getIndexInNode(PT, E.y + 1, E.x + E.foundLength, &foundNodeNo2);
     }
     // FILE* fp = fopen("log2.txt", "w");
     // fprintf(fp, "%d %d %d %d", selectStart, selectEnd, count1, count2);        
@@ -225,11 +281,26 @@ void printLinesToWriteBuffer(writeBuffer* wb,pieceTable PT, int firstLine, int l
             if(irow == lastLine - firstLine + 1) break;
             char* buffer = currNode->buffer;
             rowIndex++;
-            if(i == selectStart + currNode->start && E.selectingText && count == count1){
-                appendToWriteBuffer(wb, "\x1b[7m", 4);
+            if(E.selectingText){
+                if(i == selectStart + currNode->start && count == count1){
+                    appendToWriteBuffer(wb, "\x1b[7m", 4);
+                    flag = 1;
+                }
+                if((count >= count1 && i > selectStart + currNode->start) && !flag){
+                    appendToWriteBuffer(wb, "\x1b[7m", 4);
+                    flag = 1;
+                }
+                if(i == selectEnd + currNode->start && count == count2)
+                    appendToWriteBuffer(wb, "\x1b[m", 3);
             }
-            if(i == selectEnd + currNode->start && E.selectingText && count == count2)
-                appendToWriteBuffer(wb, "\x1b[m", 3);
+            if(E.searchEnable){
+                if(i == foundStart + currNode->start && count == foundNodeNo1){
+                    appendToWriteBuffer(wb, "\x1b[7m\x1b[33m", 9);
+                }
+                if(i == foundEnd + currNode->start && count == foundNodeNo2){
+                    appendToWriteBuffer(wb, "\x1b[39m\x1b[m", 8);
+                }
+            }
             if(buffer[i] == '\n'){
                 if(currLine == lastLine){
                     rowLen[irow] = rowIndex;
@@ -282,6 +353,7 @@ int readCharFromTerminal(){
     if(c == '\x1b'){
         char escapeSeq[5];
         if(read(STDIN_FILENO, &escapeSeq[0], 1) != 1)   return c;
+        if(escapeSeq[0] == '\x1b') return c;
         if(read(STDIN_FILENO, &escapeSeq[1], 1) != 1)   return c;
            
         if(escapeSeq[0] == '['){
@@ -515,8 +587,20 @@ void processKeyInput(){
         case CTRL_KEY('g'):
         // case 9:
             break;
+        case CTRL_KEY('f'):
+            if(E.selectingText){
+                E.selectingText = 0;
+                E.selectStartRow = 0;
+                E.selectStartCol = 0;
+                setStatusMessage("Selection of Text : OFF");
+            }
+            E.searchEnable = 1;
+            editorSearch();
+            E.searchEnable = 0;
+            E.foundLength = 0;
+            break;
         // Escape Character "\x1b"
-        case 27:
+        case '\x1b':
             break;
         case BACKSPACE:
            
@@ -668,7 +752,7 @@ void setStatusMessage(const char *fmt, ...) {
   E.message_time = time(NULL);
 }
 // Function takes prompt to display on status message and take input from user and returns
-char *prompt(char* prompt){
+char *prompt(char* prompt, void (*callback)(char *, int)){
     int size = 100;
     // Allocating memory for buffer
     char* buff = (char*)malloc(size);
@@ -683,10 +767,12 @@ char *prompt(char* prompt){
             if(len != 0) buff[--len] = '\0';
         }else if(c == 27){ // ESC key
             setStatusMessage("");
+            if(callback) callback(buff, c);
             free(buff);
             return NULL;
         }else if(c == '\r'){ // ENTER key
             setStatusMessage("");
+            if(callback) callback(buff, c);
             return buff;
         }else if(!iscntrl(c) && c < 128){
             if(len == size - 1){
@@ -696,12 +782,13 @@ char *prompt(char* prompt){
             buff[len++] = c;
             buff[len] = '\0';
         }
+        if(callback) callback(buff, c);
     }
 }
 
 void saveFile(){
     if(E.filename == NULL){
-        E.filename = prompt("Save as : %s (Press ESC to Cancel)");
+        E.filename = prompt("Save as : %s (Press ESC to Cancel)", NULL);
         if(E.filename == NULL){
             setStatusMessage("Attempt to Save Failed");
             return;
@@ -842,6 +929,8 @@ void initEditor(){
     E.selectingText = 0;
     E.selectStartRow = 0;
     E.selectStartCol = 0;
+    E.searchEnable = 0;
+    E.foundLength = 0;
 }
 
 

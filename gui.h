@@ -1,6 +1,7 @@
 #ifndef GUI_H_INCLUDED
 #define GUI_H_INCLUDED
 #include<termios.h>
+#include "piecetable.h"
 typedef struct writeBuffer{
     int size;
     char* buf;
@@ -24,7 +25,10 @@ typedef struct Editor{
     int selectingText;
     int selectStartRow;
     int selectStartCol;
+    int searchEnable;
+    int foundLength;
 }Editor;
+
 extern Editor E;
 
 #endif

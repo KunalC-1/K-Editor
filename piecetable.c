@@ -1,6 +1,8 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include "piecetable.h"
+#include<string.h>
+#include<limits.h>
 #include "gui.h"
 char* added;
 char* original;
@@ -595,4 +597,92 @@ void insertLineAt(pieceTable PT, char* line,int lineLen, int lineNo, int positio
         splitIndex = offset + position;
         splitNodeForInsert(currNode, splitIndex, lineLen);
     }
+}
+
+
+cursorPosition* searchInPT(pieceTable PT, char* str){
+    pieceNode* currNode = PT.head->next;
+    int patternSize = strlen(str);
+    int *lps = computeLPSArray(str, patternSize);
+    int i, j = 0;
+    cursorPosition* position = (cursorPosition *)malloc(sizeof(cursorPosition));
+    // First position will store number of total content in array
+    position[0].lineNo = 1;
+    int ipos = 1, currLine = 1;
+    int Ex = 0;
+    // FILE* fp = fopen("log3.txt", "w");
+    while(currNode != PT.tail){
+        i = currNode->start;
+        while(i <= currNode->end){
+            if(currNode->buffer[i] == '\n'){
+                currLine++;
+                Ex = -1;
+            }
+            if(str[j] == currNode->buffer[i]){
+                Ex++;
+                i++;
+                j++;
+            }
+            if(j == patternSize){
+                // Found
+                position = realloc(position, sizeof(cursorPosition) * (ipos + 1));
+                position[ipos].col = Ex - j;
+                position[ipos].lineNo = currLine;
+                position[0].lineNo++;
+                ipos++;
+                
+                // fprintf(fp, "%d ", index - j);        
+                
+                j = lps[j - 1];
+            }
+            else if(i <= currNode->end && str[j] != currNode->buffer[i]){
+                if(j != 0)
+                    j = lps[j - 1];
+                else{
+                    i++;
+                    Ex++;
+                }
+            }
+        }
+        currNode = currNode->next;
+    }
+    free(lps);
+    return position;
+    // fclose(fp);
+}
+
+
+int* computeLPSArray(char* pat, int patternSize){
+    // length of the previous longest prefix suffix
+    int* lps = (int*)malloc(sizeof(int) * patternSize);
+    int len = 0;
+  
+    lps[0] = 0; // lps[0] is always 0
+  
+    // the loop calculates lps[i] for i = 1 to M-1
+    int i = 1;
+    while (i < patternSize) {
+        if (pat[i] == pat[len]) {
+            len++;
+            lps[i] = len;
+            i++;
+        }
+        else // (pat[i] != pat[len])
+        {
+            // This is tricky. Consider the example.
+            // AAACAAAA and i = 7. The idea is similar
+            // to search step.
+            if (len != 0) {
+                len = lps[len - 1];
+  
+                // Also, note that we do not increment
+                // i here
+            }
+            else // if (len == 0)
+            {
+                lps[i] = 0;
+                i++;
+            }
+        }
+    }return lps;
 }
