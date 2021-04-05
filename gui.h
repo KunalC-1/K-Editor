@@ -27,6 +27,8 @@ typedef struct Editor{
     int selectStartCol;
     int searchEnable;
     int foundLength;
+    int helpModeEnable;
+    int fileChanged;
 }Editor;
 
 extern Editor E;

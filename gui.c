@@ -119,7 +119,7 @@ int selectedSize(int startRow, int startCol, int endRow, int endCol){
             copiedSize += endCol - startCol;
             break;
         }else{
-            copiedSize += E.rowLen[startRow - E.rowOffset] - startCol;
+            copiedSize += E.rowLen[startRow] - startCol;
             startRow++;
             startCol = 0;
         }
@@ -175,7 +175,7 @@ char *prompt(char* prompt, void (*callback)(char *, int));
 void editorSearch(){
     int saved_Ex = E.x;
     int saved_Ey = E.y;
-    char* query = prompt("Search: %s (Press ESC to cancel)", editorSearchCallBack);   
+    char* query = prompt("Search: %s (Press ESC 2 Times to Cancel | ARROW KEYS : Navigate | ENTER)", editorSearchCallBack);   
     if (query){
         free(query);
     }else{
@@ -264,7 +264,7 @@ void printLinesToWriteBuffer(writeBuffer* wb,pieceTable PT, int firstLine, int l
         count++;
     }
     // rowLen will store lenght of each row from first to last line
-    int* rowLen = (int* )calloc((lastLine - firstLine) + 1 ,sizeof(int));
+    // int* rowLen = (int* )calloc((lastLine - firstLine) + 1 ,sizeof(int));
     int rowIndex = 0;
     // position index in rowLen array
     int irow = 0;
@@ -303,7 +303,7 @@ void printLinesToWriteBuffer(writeBuffer* wb,pieceTable PT, int firstLine, int l
             }
             if(buffer[i] == '\n'){
                 if(currLine == lastLine){
-                    rowLen[irow] = rowIndex;
+                    E.rowLen[irow + firstLine - 1] = rowIndex;
                     irow++;
                     rowIndex = 0;
                     break;
@@ -311,7 +311,7 @@ void printLinesToWriteBuffer(writeBuffer* wb,pieceTable PT, int firstLine, int l
                 currLine++;
                 appendToWriteBuffer(wb, "\r\n", 2);
                 // printf("%d", rowIndex);
-                rowLen[irow] = rowIndex;
+                E.rowLen[irow + firstLine - 1] = rowIndex;
                 irow++;
                 rowIndex = 0;
             }
@@ -338,9 +338,9 @@ void printLinesToWriteBuffer(writeBuffer* wb,pieceTable PT, int firstLine, int l
         currNode = currNode->next;
     }
     appendToWriteBuffer(wb, "\x1b[m", 3);
-    rowLen[irow] = rowIndex+ 1;
-    free(E.rowLen);
-    E.rowLen = rowLen;
+    E.rowLen[irow  + firstLine - 1] = rowIndex+ 1;
+    // free(E.rowLen);
+    // E.rowLen = rowLen;
 }
 
 /*  Function Reads a character and Returns it   */
@@ -417,13 +417,14 @@ void cursorMovement(int key){
                 E.x--;
             } else if (E.y > 0) {
                 E.y--;
-                E.x = E.rowLen[E.y - E.rowOffset] > 1 ? E.rowLen[E.y - E.rowOffset] - 1 : 0;
+                // E.x = E.rowLen[E.y - E.rowOffset] > 1 ? E.rowLen[E.y - E.rowOffset] - 1 : 0;
+                E.x = E.rowLen[E.y] > 1 ? E.rowLen[E.y] - 1 : 0;
             }
             break;
         case ARROW_RIGHT:
-            if(E.rowLen[E.y - E.rowOffset] < 1)
+            if(E.rowLen[E.y] < 1)
                 break;
-            if (E.y < E.numrows && E.rowLen[E.y - E.rowOffset] - 1 > E.x){
+            if (E.y < E.numrows && E.rowLen[E.y] - 1 > E.x){
                 E.x++;
             }else if (E.y + 1 < E.numrows){
                 E.y++;
@@ -434,19 +435,19 @@ void cursorMovement(int key){
             if(E.y != 0){
                 E.y--;
             }
-            if(E.rowLen[E.y - E.rowOffset] < 1)
+            if(E.rowLen[E.y] < 1)
                 E.x = 0;
-            else if(E.x > E.rowLen[E.y - E.rowOffset] - 1) 
-                E.x = E.rowLen[E.y - E.rowOffset] - 1;
+            else if(E.x > E.rowLen[E.y] - 1) 
+                E.x = E.rowLen[E.y] - 1;
             break;
         case ARROW_DOWN:
             if(E.y + 1 < E.numrows){
                 E.y++;
             }
-            if(E.rowLen[E.y - E.rowOffset] < 1)
+            if(E.rowLen[E.y] < 1)
                 E.x = 0;
-            else if(E.x > E.rowLen[E.y - E.rowOffset] - 1) 
-                E.x = E.rowLen[E.y - E.rowOffset] - 1;
+            else if(E.x > E.rowLen[E.y] - 1) 
+                E.x = E.rowLen[E.y] - 1;
             break;
     }
 }
@@ -471,9 +472,11 @@ void scrollScreen(){
 
 }
 int bufferIndex = 0;
+
 /*  Function Processes Key Input   */
 void processKeyInput(){
     int repeat, index;
+    static int quit_no = 3;
     int c = readCharFromTerminal();
     #ifdef DEBUG
         FILE *fp = fopen("log.txt", "w");
@@ -483,6 +486,11 @@ void processKeyInput(){
     switch (c){
         
         case CTRL_KEY('q'):
+            if (E.fileChanged && quit_no > 0) {
+                setStatusMessage("WARNING !!! File has unsaved changes. | Press Ctrl-Q %d more times to quit.", quit_no);
+                quit_no--;
+                return;
+            }
             write(STDOUT_FILENO, "\x1b[2J", 4);
             write(STDOUT_FILENO, "\x1b[H", 3);
             exit(0);
@@ -496,7 +504,7 @@ void processKeyInput(){
             }
             free(E.copyBuff);
             E.copyBuff = copyLine(E.PT, E.y + 1);
-            E.copyBuffLen = E.rowLen[E.y - E.rowOffset] - 1;
+            E.copyBuffLen = E.rowLen[E.y] - 1;
             #ifdef COPYLINE
                 FILE *fp = fopen("log2.txt", "w");
                 fprintf(fp, "%d ", E.copyBuffLen);
@@ -526,6 +534,7 @@ void processKeyInput(){
                 added[++index] = E.copyBuff[i];
             }
             insertLineAt(E.PT, E.copyBuff, E.copyBuffLen, E.y+1, E.x);
+            E.fileChanged = 1;
             addedIndex = index;
             refreshScreen();
             break;
@@ -578,12 +587,11 @@ void processKeyInput(){
             break;
         case END_KEY :
             if(E.y < E.numrows)
-                E.x = E.rowLen[E.y - E.rowOffset] - 1;
+                E.x = E.rowLen[E.y] - 1;
             break;
         // CTRL-L refreshes the screen but we dont need
         case CTRL_KEY('l'):
         case CTRL_KEY('j'):
-        case CTRL_KEY('h'):
         case CTRL_KEY('g'):
         // case 9:
             break;
@@ -600,6 +608,15 @@ void processKeyInput(){
             E.foundLength = 0;
             break;
         // Escape Character "\x1b"
+        case CTRL_KEY('h'):
+            E.helpModeEnable = 1;
+            refreshScreen();
+            int c1 = readCharFromTerminal();
+            while(c1 != CTRL_KEY('h')){
+                c1 = readCharFromTerminal();
+            }
+            E.helpModeEnable = 0;
+            break;
         case '\x1b':
             break;
         case BACKSPACE:
@@ -610,6 +627,7 @@ void processKeyInput(){
                 deleteCharAt(E.PT, E.y + 1, E.x);
                 if(E.x > 0) E.x--;
             }
+            E.fileChanged = 1;
             if(E.selectingText){
                 E.selectingText = 0;
                 E.selectStartRow = 0;
@@ -649,6 +667,7 @@ void processKeyInput(){
             }
             added[++addedIndex] = c;
             insertCharAt(E.PT, E.y+1,E.x);
+            E.fileChanged = 1;
             if(c == '\n'){
                 E.x = 0;
                 E.y++;
@@ -658,7 +677,201 @@ void processKeyInput(){
                 E.x++;
             break;
     }
+    quit_no = 3;
 }
+
+void helpDisplay(writeBuffer* wb){
+    for(int i = 0; i < E.screenrows; i++){
+        // Printing Welcome message in middle of screen
+        if(i == E.screenrows /4){
+            char msg[55];
+            int msglen = sprintf(msg , "=================== Editor By Kunal ==================");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[31m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 1){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-Q : Exit From Editor                          ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[32m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 2){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-S : Save the Changes                          ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[33m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 3){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-F : Search in File                            ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[34m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 4){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-X : Copy Current Line                         ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[35m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 5){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-C : Copy Selected Text                        ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[36m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 6){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-V : Paste Copied Text                         ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[37m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 7){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-G : Goto to Certain Line                      ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[36m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 8){
+            char msg[53];
+            int msglen = sprintf(msg , "SHIFT + ARROW-KEY : Enable / Disable Text Selection");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[32m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 9){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-H : Enable / Disable Help Mode                ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[33m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 10){
+            char msg[53];
+            int msglen = sprintf(msg , "HOME : Move Cursor at Start of Line                ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[34m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 11){
+            char msg[53];
+            int msglen = sprintf(msg , "END : Move Cursor at End of Line                   ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[35m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 12){
+            char msg[53];
+            int msglen = sprintf(msg , "PAGE-UP / PAGE-DOWN : To Scroll Up and Down        ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[36m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        
+        else
+            appendToWriteBuffer(wb, "~", 1);
+        appendToWriteBuffer(wb, "\r\n", 2);
+    }
+}
+
 /*
  * Function prints out Text in PieceTable onto the screen
  */
@@ -680,11 +893,26 @@ void displayRows(writeBuffer* wb){
                     while(space--) appendToWriteBuffer(wb, " ", 1);
                     appendToWriteBuffer(wb, msg, msglen);
                 }
+                else if(i == E.screenrows /3 + 1){
+                    char msg[50];
+                    int msglen = sprintf(msg , "Ctrl-Q : Exit From Editor");
+                    if(msglen > E.screencols) msglen = E.screencols;
+                    int space = (E.screencols - msglen)/2;
+                    if(space){
+                        appendToWriteBuffer(wb, "~", 1);
+                        space--;
+                    }
+                    while(space--) appendToWriteBuffer(wb, " ", 1);
+                    appendToWriteBuffer(wb, msg, msglen);
+                }
                 else
                     appendToWriteBuffer(wb, "~", 1);
             }
             appendToWriteBuffer(wb, "\r\n", 2);
         }
+    }
+    else if(E.helpModeEnable){
+        helpDisplay(wb);
     }
     else{
 
@@ -715,7 +943,7 @@ void drawStatusBar(writeBuffer* wb){
     appendToWriteBuffer(wb, "\x1b[7m", 4);
 
     char status[100], rstatus[100];
-    int len = sprintf(status, "%.20s - %d lines %s", E.filename ? E.filename : "[No Name]", E.numrows, "[Modified]");
+    int len = sprintf(status, "%.20s - %d lines %s", E.filename ? E.filename : "[No Name]", E.numrows, E.fileChanged ? "[Modified]" : "");
     int rightLen = sprintf(rstatus, "[%d, %d]", E.y + 1, E.x);
     if(len > E.screencols) len = E.screencols;
     appendToWriteBuffer(wb, status, len);
@@ -788,7 +1016,7 @@ char *prompt(char* prompt, void (*callback)(char *, int)){
 
 void saveFile(){
     if(E.filename == NULL){
-        E.filename = prompt("Save as : %s (Press ESC to Cancel)", NULL);
+        E.filename = prompt("Save as : %s (Press ESC 2 Times to Cancel)", NULL);
         if(E.filename == NULL){
             setStatusMessage("Attempt to Save Failed");
             return;
@@ -799,6 +1027,7 @@ void saveFile(){
         int fileSize = writeToFile(E.PT, fp);
         setStatusMessage("%d Bytes written to File", fileSize);
         fclose(fp);
+        E.fileChanged = 0;
         return;
     }
     fclose(fp);
@@ -821,6 +1050,10 @@ int getWindowSize(int *rows, int* cols){
 
 /*   Function  Refreshes the Screen     */
 void refreshScreen(){
+    if (getWindowSize(&E.screenrows, &E.screencols) == -1) returnError("Error in getWindowSize");
+    E.screenrows -= 2;
+    E.rowLen = (int *)realloc(E.rowLen, E.numrows * sizeof(int));
+
     scrollScreen();
     char position[20];
     writeBuffer wb;
@@ -902,6 +1135,8 @@ void openEditor(char *filename){
     }
     if(fileSize == 0)
         E.numrows = 1;
+    E.rowLen = calloc(E.numrows, sizeof(int));
+    E.fileChanged = 0;
     fclose(fp);
 }
 
@@ -925,12 +1160,14 @@ void initEditor(){
     if(getWindowSize(&E.screenrows, &E.screencols) == -1)
         returnError("Error in getWindowSize");
     E.screenrows -= 2;
-    E.rowLen = (int*)calloc(E.screenrows - 1, sizeof(int));
+    // E.rowLen = (int*)calloc(E.screenrows - 1, sizeof(int));
+    E.rowLen = NULL;
     E.selectingText = 0;
     E.selectStartRow = 0;
     E.selectStartCol = 0;
     E.searchEnable = 0;
     E.foundLength = 0;
+    E.fileChanged = 0;
 }
 
 
@@ -942,7 +1179,7 @@ int main(int argc, char* argv[]){
     if(argc >= 2)
         openEditor(argv[1]);
     
-    setStatusMessage("HELP: Ctrl-Q = quit");
+    setStatusMessage("HELP: Ctrl-Q = Quit | Ctrl-S = Save | Ctrl-H = Help");
     while(1){
         refreshScreen();
         processKeyInput();        

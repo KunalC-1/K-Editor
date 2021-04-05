@@ -81,7 +81,7 @@ void splitNodeForDelete(pieceNode* node, int splitIndex){
         if(node->buffer[node->start + splitIndex - 1] == '\n'){
             if(E.y > 0) E.y--;
             E.numrows--;
-            E.x = E.rowLen[E.y - E.rowOffset] > 1 ? E.rowLen[E.y - E.rowOffset] : 0;
+            E.x = E.rowLen[E.y] > 1 ? E.rowLen[E.y] : 0;
         }
         leftPiece->next = rightPiece;
         rightPiece->prev = leftPiece;
@@ -249,7 +249,7 @@ void deleteCharAt(pieceTable PT, int lineNo, int position){
                 if(currNode->buffer[currNode->end] == '\n'){
                     if(E.y > 0) E.y--;
                     E.numrows--;
-                    E.x = E.rowLen[E.y - E.rowOffset] > 1 ? E.rowLen[E.y - E.rowOffset] : 0;
+                    E.x = E.rowLen[E.y] > 1 ? E.rowLen[E.y] : 0;
                 }
                 currNode->prev->next = currNode->next;
                 currNode->next->prev = currNode->prev;
@@ -258,7 +258,7 @@ void deleteCharAt(pieceTable PT, int lineNo, int position){
                 if(currNode->buffer[currNode->end] == '\n'){
                     if(E.y > 0) E.y--;
                     E.numrows--;
-                    E.x = E.rowLen[E.y - E.rowOffset] > 1 ? E.rowLen[E.y - E.rowOffset] : 0;
+                    E.x = E.rowLen[E.y] > 1 ? E.rowLen[E.y] : 0;
                     currNode->lineCount--;
                     currNode->lineBreak = (int*)realloc(currNode->lineBreak, currNode->lineCount * sizeof(int));
                 }currNode->end--;
@@ -268,7 +268,7 @@ void deleteCharAt(pieceTable PT, int lineNo, int position){
             if(currNode->buffer[currNode->start] == '\n'){
                 if(E.y > 0) E.y--;
                 E.numrows--;
-                E.x = E.rowLen[E.y - E.rowOffset] > 1 ? E.rowLen[E.y - E.rowOffset] : 0;
+                E.x = E.rowLen[E.y] > 1 ? E.rowLen[E.y] : 0;
                 reverseArray(currNode->lineBreak,currNode->lineCount);
                 currNode->lineCount--;
                 currNode->lineBreak = (int*)realloc(currNode->lineBreak, currNode->lineCount * sizeof(int));
@@ -290,7 +290,7 @@ void deleteCharAt(pieceTable PT, int lineNo, int position){
             if(currNode->buffer[currNode->start] == '\n'){
                 if(E.y > 0) E.y--;
                 E.numrows--;
-                E.x = E.rowLen[E.y - E.rowOffset] > 1 ? E.rowLen[E.y - E.rowOffset] : 0;
+                E.x = E.rowLen[E.y] > 1 ? E.rowLen[E.y] : 0;
                 reverseArray(currNode->lineBreak,currNode->lineCount);
                 currNode->lineCount--;
                 currNode->lineBreak = (int*)realloc(currNode->lineBreak, currNode->lineCount * sizeof(int));
