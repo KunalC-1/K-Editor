@@ -1,4 +1,4 @@
-gui.c
-writebuff.txt
-sample2.txt
-read.txt
+gui.o
+piecetable.o
+main.o
+main

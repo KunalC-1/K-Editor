@@ -712,6 +712,20 @@ void reverseArray(int *arr, int size){
     }
 }
 
+// Function delete all malloced memory for PieceTable ADT
+void deletePieceTable(pieceTable* PT){
+    pieceNode* currNode = PT->head;
+    PT->head = NULL;
+    pieceNode* prev = NULL;
+    while(currNode != PT->tail){
+        prev = currNode;
+        currNode = currNode->next;
+        free(prev->lineBreak);
+        free(prev);
+    }
+    free(PT->tail);
+    PT->tail = NULL;
+}
 
 /*                      DEBUG PIECETABLE                       */
 

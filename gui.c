@@ -20,6 +20,7 @@
 
 #define CTRL_KEY(x) (x & 0x1f)
 
+// Different Keyboard Keys
 enum keyboardKeys
 {
     ARROW_LEFT = 500,
@@ -46,7 +47,7 @@ int addedIndex = -1;
 int addedSize;
 Editor E;
 
-/* ========================= Debuging Section ============================ */
+/* ============================== Debuging Section ============================== */
 void debugRowLen(){
     FILE* fp = fopen("rowlen.txt", "w");
     for(int i = 0 ; i < E.numrows; i++){
@@ -198,7 +199,7 @@ void openEditor(char *filename){
     E.filename = strdup(filename);
     FILE *fp = fopen(filename, "rb");
     if(!fp){
-        returnError("Error in Opening File");
+        return;
     }
     // To get file size
     fseek(fp, 0, SEEK_END);
@@ -219,7 +220,7 @@ void openEditor(char *filename){
         (E.PT.tail)->prev = newNode;
         (E.PT.head)->next = newNode;
         // Update Number of Rows
-        E.numrows = newNode->lineCount + 1;                               ///  //// //// See Later
+        E.numrows = newNode->lineCount + 1;
     }
     if(fileSize == 0)
         E.numrows = 1;
@@ -735,7 +736,7 @@ void helpDisplay(writeBuffer* wb){
         }
         else if(i == E.screenrows /3 + 4){
             char msg[53];
-            int msglen = sprintf(msg , "Ctrl-X : Copy Current Line                         ");
+            int msglen = sprintf(msg , "Ctrl-X : Cut Selected Text                         ");
             if(msglen > E.screencols) msglen = E.screencols;
             int space = (E.screencols - msglen)/2;
             if(space){
@@ -859,6 +860,34 @@ void helpDisplay(writeBuffer* wb){
             appendToWriteBuffer(wb, msg, msglen);
             appendToWriteBuffer(wb, "\x1b[39m", 5);
         }
+        else if(i == E.screenrows /3 + 13){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-J / Ctrl + ENTER : Insert New Line Below      ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[32m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
+        else if(i == E.screenrows /3 + 14){
+            char msg[53];
+            int msglen = sprintf(msg , "Ctrl-L : Copy Current Line                         ");
+            if(msglen > E.screencols) msglen = E.screencols;
+            int space = (E.screencols - msglen)/2;
+            if(space){
+                appendToWriteBuffer(wb, "~", 1);
+                space--;
+            }
+            while(space--) appendToWriteBuffer(wb, " ", 1);
+            appendToWriteBuffer(wb, "\x1b[33m", 5);
+            appendToWriteBuffer(wb, msg, msglen);
+            appendToWriteBuffer(wb, "\x1b[39m", 5);
+        }
         
         else
             appendToWriteBuffer(wb, "~", 1);
@@ -977,6 +1006,7 @@ void processKeyInput(){
             // Clearing Screen
             write(STDOUT_FILENO, "\x1b[2J", 4);
             write(STDOUT_FILENO, "\x1b[H", 3);
+            deleteEditor();
             exit(0);
             break;
 
@@ -1316,7 +1346,7 @@ void editorCopySelectedText(){
     // If previously copied something then free it
     free(E.copyBuff);
 
-    int startRow,startCol, endRow, endCol, copiedSize = 0;
+    int startRow,startCol, endRow, endCol;
 
     // Swap if selection start is after selection ends
     if(E.selectStartRow > E.y || (E.y == E.selectStartRow && E.x < E.selectStartCol)){
@@ -1494,4 +1524,17 @@ void initEditor(){
     E.searchEnable = 0;
     E.foundLength = 0;
     E.fileChanged = 0;
+}
+
+/*      Function Delete Editor structure by freeing all Malloced Memory
+ */
+
+void deleteEditor(){
+    free(E.rowLen);
+    E.rowLen = NULL;
+    free(E.filename);
+    E.filename = NULL;
+    free(E.copyBuff);
+    E.copyBuff = NULL;
+    deletePieceTable(&E.PT);
 }

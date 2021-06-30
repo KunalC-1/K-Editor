@@ -55,6 +55,8 @@ int getIndexInNode(pieceTable PT, int lineNo, int position, int* count);
 
 cursorPosition* searchInPT(pieceTable PT, char* str);
 
+void deletePieceTable(pieceTable* PT);
+
 void printPieceTable(pieceTable PT, FILE* fp);
 
 #endif

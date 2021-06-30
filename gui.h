@@ -88,6 +88,7 @@ void editorGoToLineCallBack(char* query, int key);
 void editorGoToLine();
 
 void initEditor();
+void deleteEditor();
 
 
 
